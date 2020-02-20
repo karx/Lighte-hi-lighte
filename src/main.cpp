@@ -4,12 +4,14 @@
 #include <WebServer.h>
 #include <WS2812FX.h>
 #include <WiFiClient.h>
-
+#include <Preferences.h>
+#include <mac_util.cpp>
+#include <ArduinoNvs.h>
 
 extern const char index_html[];
 extern const char main_js[];
 
-#define WIFI_SSID "Lighte-Hi-Lighte"
+String BASE_WIFI_SSID = "Lighte-Hi-Lighte";
 #define WIFI_PASSWORD "AP12345678"
 
 //#define STATIC_IP                       // uncomment for static IP, set IP below
@@ -40,11 +42,10 @@ String modes = "";
 uint8_t myModes[] = {}; // *** optionally create a custom list of effect/mode numbers
 boolean auto_cycle = false;
 
-WS2812FX ws2812fx = WS2812FX(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+String DEVICE_MAC_ADDRESS;
+bool res;
+WS2812FX ws2812fx = WS2812FX(LED_COUNT, LED_PIN, NEO_RGBW + NEO_KHZ800);
 WebServer server(HTTP_PORT);
-
-
-
 
 /*
  * Connect to WiFi. If no connection is made within WIFI_TIMEOUT, ESP gets resettet.
@@ -52,11 +53,12 @@ WebServer server(HTTP_PORT);
 void wifi_setup() {
   Serial.println();
   Serial.print("Connecting to ");
-  Serial.println(WIFI_SSID);
+  // Serial.println(WIFI_SSID);
 
   // WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   // WiFi.mode(WIFI_STA);
-  WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
+  String uniqueAP = BASE_WIFI_SSID + " " + DEVICE_MAC_ADDRESS;
+  WiFi.softAP(uniqueAP.c_str(), WIFI_PASSWORD);
 
   IPAddress myIP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
@@ -185,6 +187,11 @@ void setup(){
   Serial.println();
   Serial.println("Starting...");
 
+  DEVICE_MAC_ADDRESS = mac_util::getMacAddress();
+  Serial.printf("Device ID : %s",DEVICE_MAC_ADDRESS);
+  Serial.println();
+  NVS.begin();
+  
   modes.reserve(5000);
   modes_setup();
 
@@ -195,6 +202,10 @@ void setup(){
   ws2812fx.setSpeed(DEFAULT_SPEED);
   ws2812fx.setBrightness(DEFAULT_BRIGHTNESS);
   ws2812fx.start();
+
+  //last known mode
+  uint8_t lastMode = NVS.getInt("last-mode"); //retuen NULL if there is no value
+  ws2812fx.setMode(lastMode); Serial.println("Changed to Last Known Mode");Serial.println(lastMode); Serial.println(ws2812fx.getModeName(lastMode));
 
   Serial.println("Wifi setup");
   wifi_setup();
@@ -208,7 +219,7 @@ void setup(){
   server.begin();
   Serial.println("HTTP server started.");
   Serial.println("ready!");
-  
+
 }
 
 
@@ -217,17 +228,6 @@ void loop() {
 
   server.handleClient();
   ws2812fx.service();
-
-  // if(now - last_wifi_check_time > WIFI_TIMEOUT) {
-  //   Serial.print("Checking WiFi... ");
-  //   if(WiFi.status() != WL_CONNECTED) {
-  //     Serial.println("WiFi connection lost. Reconnecting...");
-  //     wifi_setup();
-  //   } else {
-  //     Serial.println("OK");
-  //   }
-  //   last_wifi_check_time = now;
-  // }
 
   if(auto_cycle && (now - auto_last_change > 10000)) { // cycle effect mode every 10 seconds
     uint8_t next_mode = (ws2812fx.getMode() + 1) % ws2812fx.getModeCount();
@@ -243,145 +243,10 @@ void loop() {
     Serial.print("mode is "); Serial.println(ws2812fx.getModeName(ws2812fx.getMode()));
     auto_last_change = now;
   }
+
+  //  Serial.println(next_mode);
+   res = NVS.setInt("last-mode",ws2812fx.getMode());
+  
 }
-
-
-
-
-// #include<Arduino.h>
-// #include <Adafruit_NeoPixel.h>
-// #ifdef __AVR__
-//  #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
-// #endif
-
-// // Which pin on the Arduino is connected to the NeoPixels?
-// // On a Trinket or Gemma we suggest changing this to 1:
-// #define LED_PIN    23
-
-// // How many NeoPixels are attached to the Arduino?
-// #define LED_COUNT 13
-
-// // Declare our NeoPixel strip object:
-// Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-// // Argument 1 = Number of pixels in NeoPixel strip
-// // Argument 2 = Arduino pin number (most are valid)
-// // Argument 3 = Pixel type flags, add together as needed:
-// //   NEO_KHZ800  800 KHz bitstream (most NeoPixel products w/WS2812 LEDs)
-// //   NEO_KHZ400  400 KHz (classic 'v1' (not v2) FLORA pixels, WS2811 drivers)
-// //   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
-// //   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
-// //   NEO_RGBW    Pixels are wired for RGBW bitstream (NeoPixel RGBW products)
-
-
-// // Some functions of our own for creating animated effects -----------------
-
-// // Fill strip pixels one after another with a color. Strip is NOT cleared
-// // first; anything there will be covered pixel by pixel. Pass in color
-// // (as a single 'packed' 32-bit value, which you can get by calling
-// // strip.Color(red, green, blue) as shown in the loop() function above),
-// // and a delay time (in milliseconds) between pixels.
-// void colorWipe(uint32_t color, int wait) {
-//   for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
-//     strip.setPixelColor(i, color);         //  Set pixel's color (in RAM)
-//     strip.show();                          //  Update strip to match
-//     delay(wait);                           //  Pause for a moment
-//   }
-// }
-
-// // Theater-marquee-style chasing lights. Pass in a color (32-bit value,
-// // a la strip.Color(r,g,b) as mentioned above), and a delay time (in ms)
-// // between frames.
-// void theaterChase(uint32_t color, int wait) {
-//   for(int a=0; a<10; a++) {  // Repeat 10 times...
-//     for(int b=0; b<3; b++) { //  'b' counts from 0 to 2...
-//       strip.clear();         //   Set all pixels in RAM to 0 (off)
-//       // 'c' counts up from 'b' to end of strip in steps of 3...
-//       for(int c=b; c<strip.numPixels(); c += 3) {
-//         strip.setPixelColor(c, color); // Set pixel 'c' to value 'color'
-//       }
-//       strip.show(); // Update strip with new contents
-//       delay(wait);  // Pause for a moment
-//     }
-//   }
-// }
-
-// // Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-// void rainbow(int wait) {
-//   // Hue of first pixel runs 5 complete loops through the color wheel.
-//   // Color wheel has a range of 65536 but it's OK if we roll over, so
-//   // just count from 0 to 5*65536. Adding 256 to firstPixelHue each time
-//   // means we'll make 5*65536/256 = 1280 passes through this outer loop:
-//   for(long firstPixelHue = 0; firstPixelHue < 5*65536; firstPixelHue += 256) {
-//     for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
-//       // Offset pixel hue by an amount to make one full revolution of the
-//       // color wheel (range of 65536) along the length of the strip
-//       // (strip.numPixels() steps):
-//       int pixelHue = firstPixelHue + (i * 65536L / strip.numPixels());
-//       // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
-//       // optionally add saturation and value (brightness) (each 0 to 255).
-//       // Here we're using just the single-argument hue variant. The result
-//       // is passed through strip.gamma32() to provide 'truer' colors
-//       // before assigning to each pixel:
-//       strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
-//     }
-//     strip.show(); // Update strip with new contents
-//     delay(wait);  // Pause for a moment
-//   }
-// }
-
-// // Rainbow-enhanced theater marquee. Pass delay time (in ms) between frames.
-// void theaterChaseRainbow(int wait) {
-//   int firstPixelHue = 0;     // First pixel starts at red (hue 0)
-//   for(int a=0; a<30; a++) {  // Repeat 30 times...
-//     for(int b=0; b<3; b++) { //  'b' counts from 0 to 2...
-//       strip.clear();         //   Set all pixels in RAM to 0 (off)
-//       // 'c' counts up from 'b' to end of strip in increments of 3...
-//       for(int c=b; c<strip.numPixels(); c += 3) {
-//         // hue of pixel 'c' is offset by an amount to make one full
-//         // revolution of the color wheel (range 65536) along the length
-//         // of the strip (strip.numPixels() steps):
-//         int      hue   = firstPixelHue + c * 65536L / strip.numPixels();
-//         uint32_t color = strip.gamma32(strip.ColorHSV(hue)); // hue -> RGB
-//         strip.setPixelColor(c, color); // Set pixel 'c' to value 'color'
-//       }
-//       strip.show();                // Update strip with new contents
-//       delay(wait);                 // Pause for a moment
-//       firstPixelHue += 65536 / 90; // One cycle of color wheel over 90 frames
-//     }
-//   }
-// }
-
-// // setup() function -- runs once at startup --------------------------------
-
-// void setup() {
-//   // These lines are specifically to support the Adafruit Trinket 5V 16 MHz.
-//   // Any other board, you can remove this part (but no harm leaving it):
-// #if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
-//   clock_prescale_set(clock_div_1);
-// #endif
-//   // END of Trinket-specific code.
-
-//   strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
-//   strip.show();            // Turn OFF all pixels ASAP
-//   strip.setBrightness(100); // Set BRIGHTNESS to about 1/5 (max = 255)
-// }
-
-
-// // loop() function -- runs repeatedly as long as board is on ---------------
-
-// void loop() {
-//   // Fill along the length of the strip in various colors...
-//   colorWipe(strip.Color(255,   0,   0), 50); // Red
-//   colorWipe(strip.Color(  0, 255,   0), 50); // Green
-//   colorWipe(strip.Color(  0,   0, 255), 50); // Blue
-
-//   // Do a theater marquee effect in various colors...
-//   theaterChase(strip.Color(127, 127, 127), 50); // White, half brightness
-//   theaterChase(strip.Color(127,   0,   0), 50); // Red, half brightness
-//   theaterChase(strip.Color(  0,   0, 127), 50); // Blue, half brightness
-
-//   rainbow(10);             // Flowing rainbow cycle along the whole strip
-//   theaterChaseRainbow(50); // Rainbow-enhanced theaterChase variant
-// }
 
 
