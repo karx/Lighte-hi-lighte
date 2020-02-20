@@ -14,7 +14,8 @@ Enjoy this mood lightining solution which helps you make your ambience better.
     * Plug your device to Power.
     * Open your browser, enter address ``` 192.168.4.1 ```.
     * Play with your device.
-    * Dasboard : ![lhl-dashboard](https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png "lhl-dashboard")
+    * Dashboard : 
+    ![lhl-dashboard](https://github.com/ashtam55/Lighte-hi-lighte/blob/master/lhl-asset/dashboard.png "lhl-dashboard")
 
 * For Online use (in-beta) - 
     * Connect to Access Point - (Lighte-hi-lighte)
